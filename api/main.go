@@ -28,39 +28,39 @@ type ProcessingResult struct {
 }
 
 func main() {
-	r := gin.Default()
+	router := gin.Default()
 
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type")
+	router.Use(func(context *gin.Context) {
+		context.Header("Access-Control-Allow-Origin", "*")
+		context.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		context.Header("Access-Control-Allow-Headers", "Content-Type")
 
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
+		if context.Request.Method == "OPTIONS" {
+			context.AbortWithStatus(204)
 			return
 		}
 
-		c.Next()
+		context.Next()
 	})
 
-	r.Static("/uploads", "./uploads")
-	r.Static("/outputs", "./outputs")
+	router.Static("/uploads", "./uploads")
+	router.Static("/outputs", "./outputs")
 
 	// r.GET("/", func(c *gin.Context) {
 	// 	c.Header("Content-Type", "text/html")
 	// 	c.String(200, getHTMLForm())
 	// })
 
-	r.POST("/upload", handleVideoUpload)
+	router.POST("/upload", handleVideoUpload)
 
-	r.GET("/download/:filename", handleDownload)
+	router.GET("/download/:filename", handleDownload)
 
-	r.GET("/api/status", handleStatus)
+	router.GET("/api/status", handleStatus)
 
 	fmt.Println("🎬 Servidor iniciado na porta 8080")
 	fmt.Println("📂 Acesse: http://localhost:8080")
 
-	log.Fatal(r.Run(":8080"))
+	log.Fatal(router.Run(":8080"))
 }
 
 func handleVideoUpload(c *gin.Context) {
