@@ -8,8 +8,8 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 50px auto;
+      max-width: 1200px;
+      margin: 0 auto;
       padding: 20px;
       background-color: #f5f5f5;
     }
@@ -19,6 +19,7 @@
       padding: 30px;
       border-radius: 10px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
     }
 
     h1 {
@@ -27,12 +28,49 @@
       margin-bottom: 30px;
     }
 
-    .upload-form {
+    .upload-section {
       border: 2px dashed #ddd;
       padding: 30px;
       text-align: center;
       border-radius: 10px;
       margin: 20px 0;
+    }
+
+    .videos-section {
+      margin-top: 40px;
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .video-card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      background: #fafafa;
+    }
+
+    .video-card h3 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+
+    .video-card p {
+      margin: 5px 0;
+      color: #666;
+    }
+
+    .video-card a {
+      color: #007bff;
+      text-decoration: none;
+    }
+
+    .video-card a:hover {
+      text-decoration: underline;
     }
 
     input[type="file"] {
@@ -79,30 +117,12 @@
       margin: 20px 0;
     }
 
-    .files-list {
-      margin-top: 30px;
-    }
-
-    .file-item {
-      background: #f8f9fa;
-      padding: 10px;
-      margin: 5px 0;
-      border-radius: 5px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .download-btn {
+    .refresh-btn {
       background: #28a745;
-      color: white;
-      padding: 5px 15px;
-      text-decoration: none;
-      border-radius: 3px;
-      font-size: 14px;
+      margin-left: 10px;
     }
 
-    .download-btn:hover {
+    .refresh-btn:hover {
       background: #218838;
     }
   </style>
@@ -110,120 +130,138 @@
 
 <body>
   <div class="container">
-    <h1>🎬 FIAP X - Novo Processador de Vídeos</h1>
-    <p style="text-align: center; color: #666;">
-      Faça upload de um vídeo e receba um ZIP com todos os frames extraídos!
-    </p>
-
-    <form id="uploadForm" class="upload-form">
-      <p><strong>Selecione um arquivo de vídeo:</strong></p>
-      <input type="file" id="videoFile" accept="video/*" required>
-      <br>
-      <button type="submit">🚀 Processar Vídeo</button>
-    </form>
-
-    <div class="loading" id="loading">
-      <p>⏳ Processando vídeo... Isso pode levar alguns minutos.</p>
+    <h1>🎬  FIAP X - Novo Processador de Vídeos</h1>
+    
+    <!-- Seção de Upload -->
+    <div class="upload-section">
+      <h2>📤 Upload de Vídeo</h2>
+      <form id="uploadForm">
+        <p><strong>Selecione um arquivo de vídeo:</strong></p>
+        <input type="file" id="videoFile" accept="video/*" required>
+        <br>
+        <button type="submit">🚀 Enviar Vídeo</button>
+      </form>
+      
+      <div class="loading" id="uploadLoading">
+        <p>⏳ Enviando vídeo... Isso pode levar alguns minutos.</p>
+      </div>
+      
+      <div class="result" id="uploadResult"></div>
     </div>
 
-    <div class="result" id="result"></div>
-
-    <div class="files-list">
-      <h3>📁 Arquivos Processados:</h3>
-      <div id="filesList">Carregando...</div>
+    <!-- Seção de Listagem -->
+    <div class="videos-section">
+      <h2>📋 Vídeos Cadastrados</h2>
+      <button onclick="loadVideos()">🔄 Atualizar Lista</button>
+      
+      <div class="loading" id="listLoading">
+        <p>⏳ Carregando vídeos...</p>
+      </div>
+      
+      <div class="video-grid" id="videoGrid"></div>
     </div>
   </div>
 
   <script>
-    document.getElementById('uploadForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
+    // Configurações das APIs (serão substituídas pelo nginx)
+    const API_BASE_URL = window.API_BASE_URL || 'http://localhost:8000';
+    const UPLOAD_BASE_URL = window.UPLOAD_BASE_URL || 'http://localhost:8081';
 
+    // Upload de vídeo
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
       const fileInput = document.getElementById('videoFile');
       const file = fileInput.files[0];
-
+      
       if (!file) {
-        showResult('Selecione um arquivo de vídeo!', 'error');
+        showUploadResult('Selecione um arquivo de vídeo!', 'error');
         return;
       }
-
+      
       const formData = new FormData();
       formData.append('video', file);
-
-      showLoading(true);
-      hideResult();
-
+      
+      showUploadLoading(true);
+      hideUploadResult();
+      
       try {
-        const response = await fetch('/upload', {
+        const response = await fetch(`${UPLOAD_BASE_URL}/upload/video`, {
           method: 'POST',
           body: formData
         });
-
+        
         const result = await response.json();
-
+        
         if (result.success) {
-          showResult(
-            result.message +
-            '<br><br><a href="/download/' + result.zip_path + '" class="download-btn">⬇️ Download ZIP</a>',
+          showUploadResult(
+            `${result.message}<br><br><strong>ID:</strong> ${result.video_id}<br><strong>URL:</strong> <a href="${result.url}" target="_blank">${result.url}</a>`,
             'success'
           );
-          loadFilesList();
+          // Recarregar lista de vídeos
+          loadVideos();
         } else {
-          showResult('Erro: ' + result.message, 'error');
+          showUploadResult('Erro: ' + result.message, 'error');
         }
       } catch (error) {
-        showResult('Erro de conexão: ' + error.message, 'error');
+        showUploadResult('Erro de conexão: ' + error.message, 'error');
       } finally {
-        showLoading(false);
+        showUploadLoading(false);
       }
     });
 
-    function showResult(message, type) {
-      const result = document.getElementById('result');
+    // Carregar lista de vídeos
+    async function loadVideos() {
+      showListLoading(true);
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/videos`);
+        const data = await response.json();
+        
+        const videoGrid = document.getElementById('videoGrid');
+        
+        if (data.videos && data.videos.length > 0) {
+          videoGrid.innerHTML = data.videos.map(video => `
+            <div class="video-card">
+              <h3>${video.title}</h3>
+              <p><strong>ID:</strong> ${video.id}</p>
+              <p><strong>Status:</strong> ${video.status}</p>
+              <p><strong>Criado:</strong> ${new Date(video.created_at).toLocaleString()}</p>
+              <p><a href="${video.url}" target="_blank">🔗 Ver Vídeo</a></p>
+            </div>
+          `).join('');
+        } else {
+          videoGrid.innerHTML = '<p>Nenhum vídeo cadastrado ainda.</p>';
+        }
+      } catch (error) {
+        document.getElementById('videoGrid').innerHTML = '<p>Erro ao carregar vídeos: ' + error.message + '</p>';
+      } finally {
+        showListLoading(false);
+      }
+    }
+
+    // Funções auxiliares
+    function showUploadResult(message, type) {
+      const result = document.getElementById('uploadResult');
       result.innerHTML = message;
       result.className = 'result ' + type;
       result.style.display = 'block';
     }
-
-    function hideResult() {
-      document.getElementById('result').style.display = 'none';
+    
+    function hideUploadResult() {
+      document.getElementById('uploadResult').style.display = 'none';
+    }
+    
+    function showUploadLoading(show) {
+      document.getElementById('uploadLoading').style.display = show ? 'block' : 'none';
+    }
+    
+    function showListLoading(show) {
+      document.getElementById('listLoading').style.display = show ? 'block' : 'none';
     }
 
-    function showLoading(show) {
-      document.getElementById('loading').style.display = show ? 'block' : 'none';
-    }
-
-    async function loadFilesList() {
-      try {
-        const response = await fetch('/api/status');
-        const data = await response.json();
-
-        const filesList = document.getElementById('filesList');
-
-        if (data.files && data.files.length > 0) {
-          filesList.innerHTML = data.files.map(file =>
-            '<div class="file-item">' +
-            '<span>' + file.filename + ' (' + formatFileSize(file.size) + ') - ' + file.created_at + '</span>' +
-            '<a href="' + file.download_url + '" class="download-btn">⬇️ Download</a>' +
-            '</div>'
-          ).join('');
-        } else {
-          filesList.innerHTML = '<p>Nenhum arquivo processado ainda.</p>';
-        }
-      } catch (error) {
-        document.getElementById('filesList').innerHTML = '<p>Erro ao carregar arquivos.</p>';
-      }
-    }
-
-    function formatFileSize(bytes) {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    // Carregar lista de arquivos ao inicializar
-    loadFilesList();
+    // Carregar vídeos ao inicializar
+    loadVideos();
   </script>
 </body>
 

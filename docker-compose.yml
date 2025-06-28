@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: database
+    environment:
+      POSTGRES_DB: fiap_videos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "6543:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./api
+    ports:
+      - "8000:8080"
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: fiap_videos
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: videos
+      MINIO_USE_SSL: false
+      API_PORT: 8080
+    depends_on:
+      database:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  upload-service:
+    build: ./upload-service
+    ports:
+      - "8081:8081"
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: videos
+      MINIO_USE_SSL: false
+      API_BASE_URL: http://api:8080
+      UPLOAD_SERVICE_PORT: 8081
+    depends_on:
+      minio:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  frontend:
+    build: ./frontend
+    container_name: videos_frontend
+    environment:
+      API_BASE_URL: http://localhost:8000
+      UPLOAD_BASE_URL: http://localhost:8081
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+      - upload-service
+
+volumes:
+  minio_data:
+  pgdata:
+
+networks:
+  videos-network:
+    driver: bridge
