@@ -1,15 +1,13 @@
-FROM golang:1.21-alpine
-
-RUN apk add --no-cache ffmpeg
+FROM golang:1.22-alpine
 
 WORKDIR /app
 
 COPY . .
 
+ENV GOTOOLCHAIN=auto
+
 RUN go mod tidy
 
-RUN mkdir -p uploads outputs temp
+RUN go build -o main ./cmd/main.go
 
-EXPOSE 8080
-
-CMD ["go", "run", "main.go"]
+CMD ["./main"]

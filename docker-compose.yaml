@@ -14,7 +14,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./database/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d fiap_videos -p 5432"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,9 +35,18 @@ services:
     build: ./api
     ports:
       - "8000:8000"
+    environment:
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: fiap_videos
+      SERVER_PORT: :8000
     depends_on:
-      - minio
-      - database
+      database:
+        condition: service_healthy
+      minio:
+        condition: service_started
 
   worker:
     build: ./worker
