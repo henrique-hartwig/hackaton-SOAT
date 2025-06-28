@@ -1,19 +1,23 @@
 version: '3'
 
 services:
-  frontend:
-    build: ./frontend
+  database:
+    image: postgres:15-alpine
+    container_name: database
+    environment:
+      POSTGRES_DB: fiap_videos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
-      - "80:80"
-    depends_on:
-      - api
-
-  api:
-    build: ./api
-    ports:
-      - "8080:8080"
-    depends_on:
-      - minio
+      - "6543:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fiap_videos -p 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -27,5 +31,27 @@ services:
       - minio_data:/data
     command: server /data --console-address ":9001"
 
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - minio
+      - database
+
+  worker:
+    build: ./worker
+    depends_on:
+      - minio
+      - database
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
 volumes:
   minio_data:
+  pgdata:
