@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,6 +46,19 @@ func main() {
 	}
 
 	router := gin.Default()
+
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	})
 
 	// Endpoint de upload
 	router.POST("/upload/video", func(c *gin.Context) {
@@ -130,9 +144,14 @@ func createVideoInAPI(title, url string) (uint, error) {
 		return 0, err
 	}
 
+	apiBaseURL := os.Getenv("API_BASE_URL")
+	if apiBaseURL == "" {
+		apiBaseURL = "http://localhost:8000"
+	}
+
 	// Chamar API de vídeos
 	resp, err := http.Post(
-		"http://api:8000/api/v1/videos",
+		fmt.Sprintf("%s/api/v1/videos", apiBaseURL),
 		"application/json",
 		bytes.NewBuffer(jsonData),
 	)
