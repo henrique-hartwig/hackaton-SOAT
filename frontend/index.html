@@ -22,10 +22,30 @@
       margin-bottom: 20px;
     }
 
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
     h1 {
       color: #333;
-      text-align: center;
-      margin-bottom: 30px;
+      margin: 0;
+    }
+
+    .logout-btn {
+      background: #dc3545;
+      color: white;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .logout-btn:hover {
+      background: #c82333;
     }
 
     .upload-section {
@@ -125,12 +145,163 @@
     .refresh-btn:hover {
       background: #218838;
     }
+
+    /* Modal de Autenticação */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(5px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      max-width: 400px;
+      width: 90%;
+      position: relative;
+    }
+
+    .modal h2 {
+      margin: 0 0 20px 0;
+      text-align: center;
+      color: #333;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+      color: #555;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .modal-buttons button {
+      flex: 1;
+      padding: 10px;
+      font-size: 14px;
+    }
+
+    .secondary-btn {
+      background: #6c757d;
+    }
+
+    .secondary-btn:hover {
+      background: #5a6268;
+    }
+
+    .form-toggle {
+      text-align: center;
+      margin-top: 15px;
+    }
+
+    .form-toggle a {
+      color: #007bff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .form-toggle a:hover {
+      text-decoration: underline;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .blur {
+      filter: blur(5px);
+      pointer-events: none;
+    }
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <h1>🎬  FIAP X - Novo Processador de Vídeos</h1>
+  <!-- Modal de Autenticação -->
+  <div id="authModal" class="modal-overlay hidden">
+    <div class="modal">
+      <!-- Formulário de Login -->
+      <div id="loginForm">
+        <h2>🔐 Login</h2>
+        <form id="loginFormElement">
+          <div class="form-group">
+            <label for="loginEmail">Email:</label>
+            <input type="email" id="loginEmail" required>
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Senha:</label>
+            <input type="password" id="loginPassword" required>
+          </div>
+          <div class="modal-buttons">
+            <button type="submit">Entrar</button>
+            <button type="button" class="secondary-btn" onclick="showSignupForm()">Criar Conta</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Formulário de Cadastro -->
+      <div id="signupForm" class="hidden">
+        <h2>📝 Criar Conta</h2>
+        <form id="signupFormElement">
+          <div class="form-group">
+            <label for="signupName">Nome:</label>
+            <input type="text" id="signupName" required>
+          </div>
+          <div class="form-group">
+            <label for="signupEmail">Email:</label>
+            <input type="email" id="signupEmail" required>
+          </div>
+          <div class="form-group">
+            <label for="signupPassword">Senha:</label>
+            <input type="password" id="signupPassword" required minlength="6">
+          </div>
+          <div class="modal-buttons">
+            <button type="submit">Criar Conta</button>
+            <button type="button" class="secondary-btn" onclick="showLoginForm()">Já tenho conta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="container" id="mainContent">
+    <div class="header">
+      <h1>🎬 FIAP X - Novo Processador de Vídeos</h1>
+      <button id="logoutBtn" class="logout-btn hidden" onclick="logout()">🚪 Sair</button>
+    </div>
     
     <!-- Seção de Upload -->
     <div class="upload-section">
@@ -167,9 +338,169 @@
     const API_BASE_URL = window.API_BASE_URL || 'http://localhost:8000';
     const UPLOAD_BASE_URL = window.UPLOAD_BASE_URL || 'http://localhost:8081';
 
-    // Upload de vídeo
+    // Gerenciamento de autenticação
+    let isAuthenticated = false;
+    let authToken = null;
+
+    // Verificar autenticação ao carregar a página
+    function checkAuth() {
+      authToken = getCookie('auth_token');
+      isAuthenticated = !!authToken;
+      
+      if (isAuthenticated) {
+        showAuthenticatedUI();
+      } else {
+        showAuthModal();
+      }
+    }
+
+    // Mostrar modal de autenticação
+    function showAuthModal() {
+      document.getElementById('authModal').classList.remove('hidden');
+      document.getElementById('mainContent').classList.add('blur');
+    }
+
+    // Esconder modal de autenticação
+    function hideAuthModal() {
+      document.getElementById('authModal').classList.add('hidden');
+      document.getElementById('mainContent').classList.remove('blur');
+    }
+
+    // Mostrar UI autenticada
+    function showAuthenticatedUI() {
+      hideAuthModal();
+      document.getElementById('logoutBtn').classList.remove('hidden');
+      loadVideos();
+    }
+
+    // Mostrar formulário de login
+    function showLoginForm() {
+      document.getElementById('loginForm').classList.remove('hidden');
+      document.getElementById('signupForm').classList.add('hidden');
+    }
+
+    // Mostrar formulário de cadastro
+    function showSignupForm() {
+      document.getElementById('loginForm').classList.add('hidden');
+      document.getElementById('signupForm').classList.remove('hidden');
+    }
+
+    // Login
+    document.getElementById('loginFormElement').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.token) {
+          setCookie('auth_token', data.token, 1); // 1 dia
+          authToken = data.token;
+          isAuthenticated = true;
+          showAuthenticatedUI();
+        } else {
+          alert('Erro no login: ' + (data.error || 'Credenciais inválidas'));
+        }
+      } catch (error) {
+        alert('Erro de conexão: ' + error.message);
+      }
+    });
+
+    // Signup
+    document.getElementById('signupFormElement').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const name = document.getElementById('signupName').value;
+      const email = document.getElementById('signupEmail').value;
+      const password = document.getElementById('signupPassword').value;
+      
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/v1/auth/signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name, email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+          alert('Conta criada com sucesso! Fazendo login...');
+          // Fazer login automaticamente após criar conta
+          const loginResponse = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email, password })
+          });
+          
+          const loginData = await loginResponse.json();
+          
+          if (loginResponse.ok && loginData.token) {
+            setCookie('auth_token', loginData.token, 1);
+            authToken = loginData.token;
+            isAuthenticated = true;
+            showAuthenticatedUI();
+          }
+        } else {
+          alert('Erro ao criar conta: ' + (data.error || 'Erro desconhecido'));
+        }
+      } catch (error) {
+        alert('Erro de conexão: ' + error.message);
+      }
+    });
+
+    // Logout
+    function logout() {
+      deleteCookie('auth_token');
+      authToken = null;
+      isAuthenticated = false;
+      document.getElementById('logoutBtn').classList.add('hidden');
+      showAuthModal();
+    }
+
+    // Funções de cookie
+    function setCookie(name, value, days) {
+      const expires = new Date();
+      expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+      document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+    }
+
+    function getCookie(name) {
+      const nameEQ = name + "=";
+      const ca = document.cookie.split(';');
+      for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+      }
+      return null;
+    }
+
+    function deleteCookie(name) {
+      document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`;
+    }
+
+    // Upload de vídeo (apenas para usuários autenticados)
     document.getElementById('uploadForm').addEventListener('submit', async function(e) {
       e.preventDefault();
+      
+      if (!isAuthenticated) {
+        alert('Você precisa estar logado para fazer upload de vídeos');
+        return;
+      }
       
       const fileInput = document.getElementById('videoFile');
       const file = fileInput.files[0];
@@ -188,6 +519,9 @@
       try {
         const response = await fetch(`${UPLOAD_BASE_URL}/upload/video`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          },
           body: formData
         });
         
@@ -198,7 +532,6 @@
             `${result.message}<br><br><strong>ID:</strong> ${result.video_id}<br><strong>URL:</strong> <a href="${result.url}" target="_blank">${result.url}</a>`,
             'success'
           );
-          // Recarregar lista de vídeos
           loadVideos();
         } else {
           showUploadResult('Erro: ' + result.message, 'error');
@@ -210,12 +543,25 @@
       }
     });
 
-    // Carregar lista de vídeos
+    // Carregar lista de vídeos (apenas para usuários autenticados)
     async function loadVideos() {
+      if (!isAuthenticated) return;
+      
       showListLoading(true);
       
       try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/videos`);
+        const response = await fetch(`${API_BASE_URL}/api/v1/videos/me`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        
+        if (response.status === 401) {
+          // Token expirado ou inválido
+          logout();
+          return;
+        }
+        
         const data = await response.json();
         
         const videoGrid = document.getElementById('videoGrid');
@@ -260,8 +606,8 @@
       document.getElementById('listLoading').style.display = show ? 'block' : 'none';
     }
 
-    // Carregar vídeos ao inicializar
-    loadVideos();
+    // Inicializar aplicação
+    checkAuth();
   </script>
 </body>
 

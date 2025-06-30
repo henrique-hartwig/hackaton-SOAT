@@ -26,6 +26,24 @@ func (h *VideoHandler) GetAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"videos": videos})
 }
 
+func (h *VideoHandler) GetMyVideos(c *gin.Context) {
+	// Obter user ID do contexto (setado pelo middleware de autenticação)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário não autenticado"})
+		return
+	}
+
+	userIDUint := uint(userID.(int))
+	videos, err := h.videoRepo.GetByUserID(c.Request.Context(), userIDUint)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"videos": videos})
+}
+
 func (h *VideoHandler) Create(c *gin.Context) {
 	var req struct {
 		Title string `json:"title" binding:"required"`
@@ -37,7 +55,15 @@ func (h *VideoHandler) Create(c *gin.Context) {
 		return
 	}
 
-	video := video.NewVideo(req.Title, req.URL)
+	// Obter user ID do contexto (setado pelo middleware de autenticação)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Usuário não autenticado"})
+		return
+	}
+
+	userIDUint := uint(userID.(int))
+	video := video.NewVideo(req.Title, req.URL, userIDUint)
 
 	if err := h.videoRepo.Create(c.Request.Context(), video); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"upload-service/internal/middleware"
 	"upload-service/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -25,8 +26,9 @@ type UploadResponse struct {
 }
 
 type VideoCreateRequest struct {
-	Title string `json:"title"`
-	URL   string `json:"url"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	UserID uint   `json:"id_user"`
 }
 
 type VideoCreateResponse struct {
@@ -60,8 +62,8 @@ func main() {
 		c.Next()
 	})
 
-	// Endpoint de upload
-	router.POST("/upload/video", func(c *gin.Context) {
+	// Endpoint de upload (protegido por autenticação)
+	router.POST("/upload/video", middleware.AuthMiddleware(), func(c *gin.Context) {
 		handleVideoUpload(c, minioClient)
 	})
 
@@ -95,12 +97,24 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 		return
 	}
 
-	// 3. Gerar nome único para o arquivo
+	// 3. Obter user ID do contexto (setado pelo middleware de autenticação)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, UploadResponse{
+			Success: false,
+			Message: "Usuário não autenticado",
+		})
+		return
+	}
+
+	userIDUint := uint(userID.(int))
+
+	// 4. Gerar nome único para o arquivo
 	timestamp := time.Now().Format("20060102_150405")
 	fileName := fmt.Sprintf("%s_%s", timestamp, header.Filename)
 	objectName := fmt.Sprintf("videos/%s", fileName)
 
-	// 4. Upload para MinIO
+	// 5. Upload para MinIO
 	url, err := minioClient.UploadFile(c.Request.Context(), objectName, file, header.Size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, UploadResponse{
@@ -110,8 +124,9 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 		return
 	}
 
-	// 5. Criar registro na API de vídeos
-	videoID, err := createVideoInAPI(header.Filename, url)
+	// 6. Criar registro na API de vídeos
+	authHeader := c.GetHeader("Authorization")
+	videoID, err := createVideoInAPI(header.Filename, url, userIDUint, authHeader)
 	if err != nil {
 		// Se falhar, tentar deletar do MinIO
 		minioClient.DeleteFile(c.Request.Context(), objectName)
@@ -123,7 +138,7 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 		return
 	}
 
-	// 6. Retornar sucesso
+	// 7. Retornar sucesso
 	c.JSON(http.StatusCreated, UploadResponse{
 		Success: true,
 		Message: "Vídeo enviado com sucesso!",
@@ -132,11 +147,11 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 	})
 }
 
-func createVideoInAPI(title, url string) (uint, error) {
-	// Preparar dados para a API
+func createVideoInAPI(title, url string, userID uint, authHeader string) (uint, error) {
 	videoData := VideoCreateRequest{
-		Title: title,
-		URL:   url,
+		Title:  title,
+		URL:    url,
+		UserID: userID,
 	}
 
 	jsonData, err := json.Marshal(videoData)
@@ -150,11 +165,15 @@ func createVideoInAPI(title, url string) (uint, error) {
 	}
 
 	// Chamar API de vídeos
-	resp, err := http.Post(
-		fmt.Sprintf("%s/api/v1/videos", apiBaseURL),
-		"application/json",
-		bytes.NewBuffer(jsonData),
-	)
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/videos", apiBaseURL), bytes.NewBuffer(jsonData))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", authHeader)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
 	}
