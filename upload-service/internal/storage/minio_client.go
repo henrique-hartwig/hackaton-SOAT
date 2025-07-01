@@ -25,7 +25,19 @@ func NewMinioClient(endpoint, accessKey, secretKey, bucketName string) (*MinioCl
 		return nil, fmt.Errorf("erro ao conectar no Minio: %w", err)
 	}
 
-	// Verificar se bucket existe, se não, criar
+	result, err := prepareBucket(client, bucketName)
+	if err != nil {
+		return result, err
+	}
+
+	return &MinioClient{
+		client:     client,
+		bucketName: bucketName,
+		endpoint:   endpoint,
+	}, nil
+}
+
+func prepareBucket(client *minio.Client, bucketName string) (*MinioClient, error) {
 	exists, err := client.BucketExists(context.Background(), bucketName)
 	if err != nil {
 		return nil, fmt.Errorf("erro ao verificar bucket: %w", err)
@@ -37,24 +49,17 @@ func NewMinioClient(endpoint, accessKey, secretKey, bucketName string) (*MinioCl
 			return nil, fmt.Errorf("erro ao criar bucket: %w", err)
 		}
 	}
-
-	return &MinioClient{
-		client:     client,
-		bucketName: bucketName,
-		endpoint:   endpoint,
-	}, nil
+	return nil, nil
 }
 
 func (m *MinioClient) UploadFile(ctx context.Context, objectName string, file io.Reader, size int64) (string, error) {
-	// Upload do arquivo
 	_, err := m.client.PutObject(ctx, m.bucketName, objectName, file, size, minio.PutObjectOptions{
-		ContentType: "video/mp4", // Pode ser ajustado baseado no tipo de arquivo
+		ContentType: "video/mp4",
 	})
 	if err != nil {
 		return "", fmt.Errorf("erro ao fazer upload: %w", err)
 	}
 
-	// Gerar URL de acesso
 	url := fmt.Sprintf("http://%s/%s/%s", m.endpoint, m.bucketName, objectName)
 	return url, nil
 }

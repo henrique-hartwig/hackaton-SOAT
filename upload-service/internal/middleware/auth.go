@@ -31,10 +31,8 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Extrair claims do token
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			if userID, exists := claims["sub"]; exists {
-				// Converter para string e depois para int
 				userIDStr := fmt.Sprintf("%v", userID)
 				userIDInt, err := strconv.Atoi(userIDStr)
 				if err == nil {

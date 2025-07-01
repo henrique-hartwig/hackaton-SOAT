@@ -2,13 +2,16 @@ FROM golang:1.23-alpine
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
-
 COPY . .
 
-RUN go build -o main .
+ENV GOTOOLCHAIN=auto
+ENV MINIO_ENDPOINT=minio:9000
+ENV MINIO_ACCESS_KEY=minioadmin
+ENV MINIO_SECRET_KEY=minioadmin
+ENV MINIO_BUCKET=videos
 
-EXPOSE 8081
+RUN go mod tidy
+
+RUN go build -o main ./cmd/main.go
 
 CMD ["./main"] 

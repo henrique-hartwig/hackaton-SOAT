@@ -1,18 +1,15 @@
-package main
+package upload
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-
-	"upload-service/internal/middleware"
 	"upload-service/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -35,48 +32,7 @@ type VideoCreateResponse struct {
 	ID uint `json:"id"`
 }
 
-func main() {
-	// Conectar MinIO
-	minioClient, err := storage.NewMinioClient(
-		"minio:9000",
-		"minioadmin",
-		"minioadmin",
-		"videos",
-	)
-	if err != nil {
-		log.Fatal("Erro ao conectar MinIO:", err)
-	}
-
-	router := gin.Default()
-
-	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-
-		c.Next()
-	})
-
-	// Endpoint de upload (protegido por autenticação)
-	router.POST("/upload/video", middleware.AuthMiddleware(), func(c *gin.Context) {
-		handleVideoUpload(c, minioClient)
-	})
-
-	// Health check
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
-
-	log.Println("🚀 Serviço de Upload iniciado na porta 8081")
-	log.Fatal(router.Run(":8081"))
-}
-
-func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
+func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 	// 1. Receber arquivo
 	file, header, err := c.Request.FormFile("video")
 	if err != nil {
@@ -112,7 +68,7 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 	// 4. Gerar nome único para o arquivo
 	timestamp := time.Now().Format("20060102_150405")
 	fileName := fmt.Sprintf("%s_%s", timestamp, header.Filename)
-	objectName := fmt.Sprintf("videos/%s", fileName)
+	objectName := fmt.Sprintf("%d/input/%s", userIDUint, fileName)
 
 	// 5. Upload para MinIO
 	url, err := minioClient.UploadFile(c.Request.Context(), objectName, file, header.Size)
@@ -145,6 +101,18 @@ func handleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 		VideoID: videoID,
 		URL:     url,
 	})
+}
+
+func isValidVideoFile(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	validExts := []string{".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"}
+
+	for _, validExt := range validExts {
+		if ext == validExt {
+			return true
+		}
+	}
+	return false
 }
 
 func createVideoInAPI(title, url string, userID uint, authHeader string) (uint, error) {
@@ -191,16 +159,4 @@ func createVideoInAPI(title, url string, userID uint, authHeader string) (uint, 
 	}
 
 	return videoResp.ID, nil
-}
-
-func isValidVideoFile(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	validExts := []string{".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"}
-
-	for _, validExt := range validExts {
-		if ext == validExt {
-			return true
-		}
-	}
-	return false
 }
