@@ -40,6 +40,25 @@ services:
     networks:
       - videos-network
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - videos-network
+
   api:
     build: ./api
     ports:
@@ -75,12 +94,15 @@ services:
       MINIO_BUCKET: videos
       MINIO_USE_SSL: false
       API_BASE_URL: http://api:8080
-      UPLOAD_SERVICE_PORT: 8081
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVER_PORT: 8081
     depends_on:
       minio:
         condition: service_healthy
       api:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     networks:
       - videos-network
 
@@ -101,6 +123,7 @@ services:
 volumes:
   minio_data:
   pgdata:
+  rabbitmq_data:
 
 networks:
   videos-network:

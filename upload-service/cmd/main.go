@@ -1,25 +1,76 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"upload-service/internal/config"
 	"upload-service/internal/middleware"
+	"upload-service/internal/queue"
 	"upload-service/internal/services/upload"
+	"upload-service/internal/services/video_processing"
 	"upload-service/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	cfg := config.LoadConfig()
+
 	minioClient, err := storage.NewMinioClient(
-		os.Getenv("MINIO_ENDPOINT"),
-		os.Getenv("MINIO_ACCESS_KEY"),
-		os.Getenv("MINIO_SECRET_KEY"),
-		os.Getenv("MINIO_BUCKET"),
+		cfg.MinioEndpoint,
+		cfg.MinioAccessKey,
+		cfg.MinioSecretKey,
+		cfg.MinioBucket,
 	)
 	if err != nil {
 		log.Fatal("Erro ao conectar MinIO:", err)
 	}
+
+	rabbitMQClient, err := queue.NewRabbitMQClient(cfg)
+	if err != nil {
+		log.Fatal("Erro ao conectar RabbitMQ:", err)
+	}
+	defer rabbitMQClient.Close()
+
+	// Criar publisher
+	publisher := queue.NewPublisher(rabbitMQClient.GetChannel())
+
+	// Criar processor
+	processor := video_processing.NewProcessor()
+
+	// Criar consumer
+	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, publisher)
+
+	// Contexto para graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Iniciar consumer em background
+	go func() {
+		if err := consumer.StartProcessing(ctx); err != nil {
+			log.Printf("Erro no consumer de processamento: %v", err)
+		}
+	}()
+
+	// Iniciar consumer de resultados em background
+	go func() {
+		if err := consumer.StartResultConsumer(ctx); err != nil {
+			log.Printf("Erro no consumer de resultados: %v", err)
+		}
+	}()
+
+	// Configurar graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Println("🛑 Recebido sinal de shutdown, encerrando...")
+		cancel()
+	}()
 
 	router := gin.Default()
 
@@ -38,7 +89,7 @@ func main() {
 
 	// Endpoint de upload (protegido por autenticação)
 	router.POST("/upload/video", middleware.AuthMiddleware(), func(c *gin.Context) {
-		upload.HandleVideoUpload(c, minioClient)
+		upload.HandleVideoUpload(c, minioClient, publisher)
 	})
 
 	// Health check
@@ -46,6 +97,6 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	log.Println("🚀 Serviço de Upload iniciado na porta 8081")
-	log.Fatal(router.Run(":8081"))
+	log.Printf("🚀 Serviço de Upload iniciado na porta %s", cfg.ServerPort)
+	log.Fatal(router.Run(":" + cfg.ServerPort))
 }

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"upload-service/internal/models"
+	"upload-service/internal/queue"
 	"upload-service/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +34,8 @@ type VideoCreateResponse struct {
 	ID uint `json:"id"`
 }
 
-func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
+// HandleVideoUpload processa o upload de vídeo e envia para processamento
+func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publisher *queue.Publisher) {
 	// 1. Receber arquivo
 	file, header, err := c.Request.FormFile("video")
 	if err != nil {
@@ -94,13 +97,36 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient) {
 		return
 	}
 
-	// 7. Retornar sucesso
+	// 7. Enviar job para processamento
+	job := &models.VideoProcessingJob{
+		ID:        generateJobID(),
+		VideoID:   videoID,
+		UserID:    userIDUint,
+		VideoURL:  url,
+		FileName:  header.Filename,
+		Status:    models.StatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := publisher.PublishVideoProcessingJob(job); err != nil {
+		// Log do erro, mas não falha o upload
+		fmt.Printf("⚠️ Erro ao enviar job para processamento: %v\n", err)
+		// Você pode decidir se quer falhar o upload ou apenas logar o erro
+	}
+
+	// 8. Retornar sucesso
 	c.JSON(http.StatusCreated, UploadResponse{
 		Success: true,
-		Message: "Vídeo enviado com sucesso!",
+		Message: "Vídeo enviado com sucesso e enviado para processamento!",
 		VideoID: videoID,
 		URL:     url,
 	})
+}
+
+// generateJobID gera um ID único para o job
+func generateJobID() string {
+	return fmt.Sprintf("job_%d", time.Now().UnixNano())
 }
 
 func isValidVideoFile(filename string) bool {
