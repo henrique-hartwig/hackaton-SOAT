@@ -58,19 +58,6 @@ func (r *RabbitMQClient) declareQueues() error {
 		return err
 	}
 
-	// Fila de resultados do processamento
-	_, err = r.channel.QueueDeclare(
-		"processing_result_queue", // name
-		true,                      // durable
-		false,                     // delete when unused
-		false,                     // exclusive
-		false,                     // no-wait
-		nil,                       // arguments
-	)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 

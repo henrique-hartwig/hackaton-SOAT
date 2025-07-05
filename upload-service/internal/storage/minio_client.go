@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -62,6 +63,20 @@ func (m *MinioClient) UploadFile(ctx context.Context, objectName string, file io
 
 	url := fmt.Sprintf("http://%s/%s/%s", m.endpoint, m.bucketName, objectName)
 	return url, nil
+}
+
+// UploadString faz upload de uma string como arquivo no MinIO
+func (m *MinioClient) UploadString(ctx context.Context, objectName string, content string) error {
+	reader := strings.NewReader(content)
+
+	_, err := m.client.PutObject(ctx, m.bucketName, objectName, reader, int64(len(content)), minio.PutObjectOptions{
+		ContentType: "application/octet-stream",
+	})
+	if err != nil {
+		return fmt.Errorf("erro ao fazer upload de string: %w", err)
+	}
+
+	return nil
 }
 
 func (m *MinioClient) DeleteFile(ctx context.Context, objectName string) error {

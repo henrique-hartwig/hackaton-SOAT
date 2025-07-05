@@ -13,14 +13,6 @@ type VideoProcessingJob struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type VideoProcessingResult struct {
-	JobID       string    `json:"job_id"`
-	VideoID     uint      `json:"video_id"`
-	Status      string    `json:"status"`
-	Message     string    `json:"message,omitempty"`
-	ProcessedAt time.Time `json:"processed_at"`
-}
-
 const (
 	StatusPending    = "pending"
 	StatusProcessing = "processing"
@@ -29,6 +21,5 @@ const (
 )
 
 const (
-	InputProcessingQueue  = "input_processing_queue"
-	ProcessingResultQueue = "processing_result_queue"
+	InputProcessingQueue = "input_processing_queue"
 )

@@ -42,7 +42,7 @@ func main() {
 	processor := video_processing.NewProcessor()
 
 	// Criar consumer
-	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, publisher)
+	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, minioClient)
 
 	// Contexto para graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -52,13 +52,6 @@ func main() {
 	go func() {
 		if err := consumer.StartProcessing(ctx); err != nil {
 			log.Printf("Erro no consumer de processamento: %v", err)
-		}
-	}()
-
-	// Iniciar consumer de resultados em background
-	go func() {
-		if err := consumer.StartResultConsumer(ctx); err != nil {
-			log.Printf("Erro no consumer de resultados: %v", err)
 		}
 	}()
 

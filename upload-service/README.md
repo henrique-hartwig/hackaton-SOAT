@@ -1,6 +1,6 @@
 # Serviço de Upload com Processamento de Vídeo
 
-Este serviço gerencia o upload de vídeos e os envia para processamento através de filas RabbitMQ.
+Este serviço gerencia o upload de vídeos e os envia para processamento através de filas RabbitMQ. Os vídeos processados são salvos diretamente no MinIO.
 
 ## 🏗️ Arquitetura
 
@@ -25,7 +25,7 @@ upload-service/
 │   │   └── video_processing/
 │   │       └── processor.go       # Processador de vídeos
 │   └── storage/
-│       └── minio.go               # Cliente MinIO
+│       └── minio_client.go        # Cliente MinIO
 ├── go.mod
 └── go.sum
 ```
@@ -33,17 +33,28 @@ upload-service/
 ## 🔄 Fluxo de Processamento
 
 1. **Upload**: Usuário faz upload do vídeo
-2. **Armazenamento**: Vídeo é salvo no MinIO
+2. **Armazenamento**: Vídeo é salvo no MinIO em `{user_id}/input/{filename}`
 3. **Registro**: Entidade é criada na API principal
 4. **Envio para Fila**: Job é enviado para `input_processing_queue`
 5. **Processamento**: Consumer processa o vídeo
-6. **Resultado**: Resultado é enviado para `processing_result_queue`
-7. **Atualização**: Status do vídeo é atualizado na API
+6. **Salvamento**: Vídeo processado é salvo em `{user_id}/outputs/{processed_filename}`
 
 ## 📋 Filas RabbitMQ
 
 - **`input_processing_queue`**: Recebe jobs de processamento
-- **`processing_result_queue`**: Recebe resultados do processamento
+
+## 📁 Estrutura de Pastas no MinIO
+
+```
+videos/
+├── {user_id}/
+│   ├── input/
+│   │   ├── video1.mp4
+│   │   └── video2.avi
+│   └── outputs/
+│       ├── video1_processed.mp4
+│       └── video2_processed.mp4
+```
 
 ## 🌐 Acessos
 

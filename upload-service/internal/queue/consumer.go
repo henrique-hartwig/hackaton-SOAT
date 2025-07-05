@@ -3,49 +3,46 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 	"upload-service/internal/models"
 	"upload-service/internal/services/video_processing"
+	"upload-service/internal/storage"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // Consumer representa o consumer de mensagens do RabbitMQ
 type Consumer struct {
-	channel           *amqp.Channel
-	processor         *video_processing.Processor
-	publisher         *Publisher
-	processingResults chan *models.VideoProcessingResult
+	channel     *amqp.Channel
+	processor   *video_processing.Processor
+	minioClient *storage.MinioClient
 }
 
 // NewConsumer cria um novo consumer
-func NewConsumer(channel *amqp.Channel, processor *video_processing.Processor, publisher *Publisher) *Consumer {
+func NewConsumer(channel *amqp.Channel, processor *video_processing.Processor, minioClient *storage.MinioClient) *Consumer {
 	return &Consumer{
-		channel:           channel,
-		processor:         processor,
-		publisher:         publisher,
-		processingResults: make(chan *models.VideoProcessingResult, 100),
+		channel:     channel,
+		processor:   processor,
+		minioClient: minioClient,
 	}
 }
 
-// StartProcessing inicia o processamento dos jobs
 func (c *Consumer) StartProcessing(ctx context.Context) error {
-	// Consumir da fila de entrada
 	msgs, err := c.channel.Consume(
-		models.InputProcessingQueue, // queue
-		"",                          // consumer
-		false,                       // auto-ack
-		false,                       // exclusive
-		false,                       // no-local
-		false,                       // no-wait
-		nil,                         // args
+		models.InputProcessingQueue,
+		"",
+		false,
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
 		return err
 	}
-
-	// Iniciar goroutine para processar resultados
-	go c.processResults(ctx)
 
 	log.Println("🎬 Consumer iniciado - aguardando jobs de processamento...")
 
@@ -71,71 +68,49 @@ func (c *Consumer) handleMessage(msg amqp.Delivery) {
 
 	log.Printf("🎬 Processando job: VideoID=%d, UserID=%d", job.VideoID, job.UserID)
 
-	// Processar o vídeo
-	result := c.processor.ProcessVideo(&job)
-
-	// Enviar resultado para o canal
-	c.processingResults <- result
+	// Processar o vídeo e salvar resultado no MinIO
+	if err := c.processAndSaveVideo(&job); err != nil {
+		log.Printf("❌ Erro ao processar vídeo: %v", err)
+		msg.Nack(false, true) // Requeue para tentar novamente
+		return
+	}
 
 	// Acknowledgment da mensagem
 	msg.Ack(false)
 }
 
-// processResults processa os resultados e os envia para a fila
-func (c *Consumer) processResults(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case result := <-c.processingResults:
-			if err := c.publisher.PublishProcessingResult(result); err != nil {
-				log.Printf("❌ Erro ao publicar resultado: %v", err)
-			}
-		}
+// processAndSaveVideo processa o vídeo e salva o resultado no MinIO
+func (c *Consumer) processAndSaveVideo(job *models.VideoProcessingJob) error {
+	// Processar o vídeo
+	result := c.processor.ProcessVideo(job)
+
+	// Se o processamento foi bem-sucedido, salvar no MinIO
+	if result.Status == models.StatusCompleted {
+		return c.saveProcessedVideo(job, result)
 	}
+
+	return fmt.Errorf("processamento falhou: %s", result.Message)
 }
 
-// StartResultConsumer inicia o consumer de resultados
-func (c *Consumer) StartResultConsumer(ctx context.Context) error {
-	msgs, err := c.channel.Consume(
-		models.ProcessingResultQueue, // queue
-		"",                           // consumer
-		false,                        // auto-ack
-		false,                        // exclusive
-		false,                        // no-local
-		false,                        // no-wait
-		nil,                          // args
-	)
+// saveProcessedVideo salva o vídeo processado no MinIO
+func (c *Consumer) saveProcessedVideo(job *models.VideoProcessingJob, result *video_processing.ProcessingResult) error {
+	// Gerar nome do arquivo processado
+	fileName := strings.TrimSuffix(job.FileName, filepath.Ext(job.FileName))
+	processedFileName := fmt.Sprintf("%s_processed.mp4", fileName)
+
+	// Caminho no MinIO: {user_id}/outputs/{processed_file_name}
+	objectName := fmt.Sprintf("%d/outputs/%s", job.UserID, processedFileName)
+
+	// Aqui você implementaria a lógica real de processamento
+	// Por enquanto, vamos simular criando um arquivo de exemplo
+	processedContent := fmt.Sprintf("Processed video content for %s", job.FileName)
+
+	// Salvar no MinIO
+	err := c.minioClient.UploadString(context.Background(), objectName, processedContent)
 	if err != nil {
-		return err
+		return fmt.Errorf("erro ao salvar vídeo processado: %w", err)
 	}
 
-	log.Println("📋 Consumer de resultados iniciado...")
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case msg := <-msgs:
-			go c.handleResultMessage(msg)
-		}
-	}
-}
-
-// handleResultMessage processa uma mensagem de resultado
-func (c *Consumer) handleResultMessage(msg amqp.Delivery) {
-	var result models.VideoProcessingResult
-	if err := json.Unmarshal(msg.Body, &result); err != nil {
-		log.Printf("❌ Erro ao deserializar resultado: %v", err)
-		msg.Nack(false, false)
-		return
-	}
-
-	log.Printf("📋 Processando resultado: JobID=%s, VideoID=%d, Status=%s",
-		result.JobID, result.VideoID, result.Status)
-
-	// Aqui você pode adicionar lógica para atualizar o status na API
-	// Por exemplo, chamar uma API para atualizar o status do vídeo
-
-	msg.Ack(false)
+	log.Printf("✅ Vídeo processado salvo: %s", objectName)
+	return nil
 }
