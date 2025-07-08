@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"upload-service/internal/cache"
 	"upload-service/internal/config"
 	"upload-service/internal/middleware"
 	"upload-service/internal/queue"
@@ -29,6 +30,13 @@ func main() {
 		log.Fatal("Erro ao conectar MinIO:", err)
 	}
 
+	// Inicializar Redis
+	redisClient, err := cache.NewRedisClient(cfg)
+	if err != nil {
+		log.Fatal("Erro ao conectar Redis:", err)
+	}
+	defer redisClient.Close()
+
 	rabbitMQClient, err := queue.NewRabbitMQClient(cfg)
 	if err != nil {
 		log.Fatal("Erro ao conectar RabbitMQ:", err)
@@ -41,7 +49,7 @@ func main() {
 	// Criar processor
 	processor := video_processing.NewProcessor()
 
-	// Criar consumer
+	// Criar consumer (por enquanto sem Redis, vamos adicionar depois)
 	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, minioClient)
 
 	// Contexto para graceful shutdown

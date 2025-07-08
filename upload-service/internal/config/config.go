@@ -13,6 +13,9 @@ type Config struct {
 	// RabbitMQ
 	RabbitMQURL string
 
+	// Redis
+	RedisURL string
+
 	// API
 	APIBaseURL string
 
@@ -31,6 +34,9 @@ func LoadConfig() *Config {
 
 		// RabbitMQ
 		RabbitMQURL: getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"),
+
+		// Redis
+		RedisURL: getEnv("REDIS_URL", "redis://localhost:6379"),
 
 		// API
 		APIBaseURL: getEnv("API_BASE_URL", "http://localhost:8080"),
