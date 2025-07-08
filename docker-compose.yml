@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   database:
     image: postgres:15-alpine
-    container_name: database
+    container_name: video-processor-database
     environment:
       POSTGRES_DB: fiap_videos
       POSTGRES_USER: postgres
@@ -19,10 +17,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - videos-network
+      - video-processor-network
 
   minio:
     image: minio/minio:latest
+    container_name: video-processor-storage
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -38,11 +37,11 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - videos-network
+      - video-processor-network
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
+    container_name: video-processor-queue
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -57,10 +56,26 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - videos-network
+      - video-processor-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: video-processor-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - video-processor-network
 
   api:
-    build: ./api
+    image: henriquemh/video-processor-api:latest
+    container_name: video-processor-api
     ports:
       - "8000:8080"
     environment:
@@ -69,22 +84,17 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       DB_NAME: fiap_videos
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: videos
-      MINIO_USE_SSL: false
-      API_PORT: 8080
     depends_on:
       database:
         condition: service_healthy
       minio:
         condition: service_healthy
     networks:
-      - videos-network
+      - video-processor-network
 
   upload-service:
     build: ./upload-service
+    container_name: video-processor-core
     ports:
       - "8081:8081"
     environment:
@@ -95,6 +105,7 @@ services:
       MINIO_USE_SSL: false
       API_BASE_URL: http://api:8080
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      REDIS_URL: redis://redis:6379
       SERVER_PORT: 8081
     depends_on:
       minio:
@@ -103,12 +114,14 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
-      - videos-network
+      - video-processor-network
 
   frontend:
     build: ./frontend
-    container_name: videos_frontend
+    container_name: video-processor-frontend
     environment:
       API_BASE_URL: http://localhost:8000
       UPLOAD_BASE_URL: http://localhost:8081
@@ -118,13 +131,15 @@ services:
       - api
       - upload-service
     networks:
-      - videos-network
+      - video-processor-network
 
 volumes:
   minio_data:
   pgdata:
   rabbitmq_data:
+  redis_data:
 
 networks:
-  videos-network:
+  video-processor-network:
+    name: video-processor-network
     driver: bridge
