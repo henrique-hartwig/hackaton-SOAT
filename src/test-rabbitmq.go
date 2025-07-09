@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"src/internal/models"
 	"time"
-	"upload-service/internal/models"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

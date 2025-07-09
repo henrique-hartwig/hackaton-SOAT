@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"src/internal/config"
 	"time"
-	"upload-service/internal/config"
 
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisClient wrapper para operações Redis
 type RedisClient struct {
 	client *redis.Client
 	config *config.Config

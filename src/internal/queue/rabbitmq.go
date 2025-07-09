@@ -2,7 +2,7 @@ package queue
 
 import (
 	"log"
-	"upload-service/internal/config"
+	"src/internal/config"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

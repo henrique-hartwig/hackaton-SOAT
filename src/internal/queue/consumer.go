@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"src/internal/models"
+	"src/internal/services/video_processing"
+	"src/internal/storage"
 	"strings"
 	"time"
-	"upload-service/internal/models"
-	"upload-service/internal/services/video_processing"
-	"upload-service/internal/storage"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )

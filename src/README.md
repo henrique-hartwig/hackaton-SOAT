@@ -80,7 +80,7 @@ Serviço de upload e processamento de vídeos com arquitetura assíncrona usando
 ## 📦 Estrutura do Projeto
 
 ```
-upload-service/
+src/
 ├── cmd/
 │   └── main.go              # Ponto de entrada
 ├── internal/

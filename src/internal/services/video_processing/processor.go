@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"src/internal/models"
 	"time"
-	"upload-service/internal/models"
 )
 
 // ProcessingResult representa o resultado do processamento

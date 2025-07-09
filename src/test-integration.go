@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"src/internal/cache"
+	"src/internal/config"
+	"src/internal/models"
+	"src/internal/queue"
+	"src/internal/services/video_processing"
+	"src/internal/storage"
 	"time"
-	"upload-service/internal/cache"
-	"upload-service/internal/config"
-	"upload-service/internal/models"
-	"upload-service/internal/queue"
-	"upload-service/internal/services/video_processing"
-	"upload-service/internal/storage"
 )
 
 func testIntegration() {

@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"src/internal/models"
+	"src/internal/queue"
+	"src/internal/storage"
 	"strings"
 	"time"
-	"upload-service/internal/models"
-	"upload-service/internal/queue"
-	"upload-service/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
