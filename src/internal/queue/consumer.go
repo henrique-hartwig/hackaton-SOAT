@@ -18,7 +18,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Consumer representa o consumer de mensagens do RabbitMQ
 type Consumer struct {
 	channel     *amqp.Channel
 	processor   *video_processing.Processor
@@ -26,7 +25,6 @@ type Consumer struct {
 	apiBaseURL  string
 }
 
-// NewConsumer cria um novo consumer
 func NewConsumer(channel *amqp.Channel, processor *video_processing.Processor, minioClient *storage.MinioClient) *Consumer {
 	apiBaseURL := os.Getenv("API_BASE_URL")
 	if apiBaseURL == "" {
@@ -67,7 +65,6 @@ func (c *Consumer) StartProcessing(ctx context.Context) error {
 	}
 }
 
-// handleMessage processa uma mensagem individual com retry
 func (c *Consumer) handleMessage(msg amqp.Delivery) {
 	var job models.VideoProcessingJob
 	if err := json.Unmarshal(msg.Body, &job); err != nil {
@@ -78,15 +75,13 @@ func (c *Consumer) handleMessage(msg amqp.Delivery) {
 
 	log.Printf("🎬 Processando job: VideoID=%d, UserID=%d", job.VideoID, job.UserID)
 
-	// Tentar processar com retry (3 tentativas)
 	maxRetries := 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("🔄 Tentativa %d/%d para VideoID=%d", attempt, maxRetries, job.VideoID)
 
 		err := c.processAndSaveVideo(&job)
 		if err == nil {
-			// Sucesso - atualizar status para completed
-			if updateErr := c.updateVideoStatus(job.VideoID, models.StatusCompleted, "Vídeo processado com sucesso"); updateErr != nil {
+			if updateErr := c.updateVideoStatus(job.VideoID, models.StatusCompleted, job.AuthToken); updateErr != nil {
 				log.Printf("⚠️ Erro ao atualizar status para completed: %v", updateErr)
 			}
 			msg.Ack(false)
@@ -96,29 +91,29 @@ func (c *Consumer) handleMessage(msg amqp.Delivery) {
 		log.Printf("❌ Tentativa %d falhou para VideoID=%d: %v", attempt, job.VideoID, err)
 
 		if attempt < maxRetries {
-			// Aguardar antes da próxima tentativa (backoff exponencial)
 			waitTime := time.Duration(attempt*attempt) * time.Second
 			log.Printf("⏳ Aguardando %v antes da próxima tentativa...", waitTime)
 			time.Sleep(waitTime)
 		}
 	}
 
-	// Todas as tentativas falharam - atualizar status para failed
 	log.Printf("💥 Todas as %d tentativas falharam para VideoID=%d", maxRetries, job.VideoID)
-	if updateErr := c.updateVideoStatus(job.VideoID, models.StatusFailed, "Processamento falhou após 3 tentativas"); updateErr != nil {
+	if updateErr := c.updateVideoStatus(job.VideoID, models.StatusFailed, job.AuthToken); updateErr != nil {
 		log.Printf("⚠️ Erro ao atualizar status para failed: %v", updateErr)
 	}
 
-	msg.Ack(false) // Não fazer requeue, já tentamos 3 vezes
+	msg.Ack(false)
 }
 
-// updateVideoStatus atualiza o status do vídeo via API
-func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error {
-	// Primeiro, buscar o vídeo atual para obter title e url
+func (c *Consumer) updateVideoStatus(videoID uint, status string, authToken string) error {
 	getURL := fmt.Sprintf("%s/api/v1/videos/%d", c.apiBaseURL, videoID)
 	getReq, err := http.NewRequest("GET", getURL, nil)
 	if err != nil {
 		return fmt.Errorf("erro ao criar requisição GET: %w", err)
+	}
+
+	if authToken != "" {
+		getReq.Header.Set("Authorization", authToken)
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -132,19 +127,17 @@ func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error
 		return fmt.Errorf("erro ao buscar vídeo: API retornou status %d", getResp.StatusCode)
 	}
 
-	// Decodificar resposta para obter dados atuais do vídeo
-	var videoData map[string]interface{}
+	var videoData map[string]any
 	if err := json.NewDecoder(getResp.Body).Decode(&videoData); err != nil {
 		return fmt.Errorf("erro ao decodificar resposta: %w", err)
 	}
 
-	// Mapear status do upload-service para o status da API
 	var apiStatus string
 	switch status {
 	case models.StatusPending:
 		apiStatus = "pending"
 	case models.StatusProcessing:
-		apiStatus = "pending" // Manter como pending durante processamento
+		apiStatus = "processing"
 	case models.StatusCompleted:
 		apiStatus = "processed"
 	case models.StatusFailed:
@@ -153,8 +146,7 @@ func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error
 		apiStatus = "pending"
 	}
 
-	// Preparar dados para update (manter title e url originais, atualizar apenas status)
-	updateData := map[string]interface{}{
+	updateData := map[string]any{
 		"title":  videoData["title"],
 		"url":    videoData["url"],
 		"status": apiStatus,
@@ -165,7 +157,6 @@ func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error
 		return fmt.Errorf("erro ao serializar dados: %w", err)
 	}
 
-	// Chamar API para atualizar vídeo
 	url := fmt.Sprintf("%s/api/v1/videos/%d", c.apiBaseURL, videoID)
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -173,6 +164,10 @@ func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
+	if authToken != "" {
+		req.Header.Set("Authorization", authToken)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -188,38 +183,70 @@ func (c *Consumer) updateVideoStatus(videoID uint, status, message string) error
 	return nil
 }
 
-// processAndSaveVideo processa o vídeo e salva o resultado no MinIO
 func (c *Consumer) processAndSaveVideo(job *models.VideoProcessingJob) error {
-	// Atualizar status para processing
-	if err := c.updateVideoStatus(job.VideoID, models.StatusProcessing, "Processando vídeo..."); err != nil {
+	if err := c.updateVideoStatus(job.VideoID, models.StatusProcessing, job.AuthToken); err != nil {
 		log.Printf("⚠️ Erro ao atualizar status para processing: %v", err)
 	}
 
-	// Processar o vídeo
 	result := c.processor.ProcessVideo(job)
+	log.Printf("🔎 Resultado do processamento: Status=%s, Message=%s, ProcessedAt=%s, ZipPath=%s, FrameCount=%d, Images=%v",
+		result.Status, result.Message, result.ProcessedAt.Format("2006-01-02 15:04:05"), result.ZipPath, result.FrameCount, result.Images)
 
-	// Se o processamento foi bem-sucedido, salvar no MinIO
 	if result.Status == models.StatusCompleted {
-		return c.saveProcessedVideo(job)
+		return c.saveProcessedVideo(job, result)
 	}
 
 	return fmt.Errorf("processamento falhou: %s", result.Message)
 }
 
 // saveProcessedVideo salva o vídeo processado no MinIO
-func (c *Consumer) saveProcessedVideo(job *models.VideoProcessingJob) error {
-	// Gerar nome do arquivo processado
-	fileName := strings.TrimSuffix(job.FileName, filepath.Ext(job.FileName))
-	processedFileName := fmt.Sprintf("%s_processed.mp4", fileName)
+func (c *Consumer) saveProcessedVideo(job *models.VideoProcessingJob, result *video_processing.ProcessingResult) error {
+	// Se temos um arquivo ZIP gerado, salvá-lo no MinIO
+	if result.ZipPath != "" {
+		zipFilePath := filepath.Join("outputs", result.ZipPath)
 
-	// Caminho no MinIO: {user_id}/outputs/{processed_file_name}
+		// Verificar se o arquivo existe
+		if _, err := os.Stat(zipFilePath); os.IsNotExist(err) {
+			return fmt.Errorf("arquivo ZIP não encontrado: %s", zipFilePath)
+		}
+
+		// Abrir o arquivo ZIP
+		zipFile, err := os.Open(zipFilePath)
+		if err != nil {
+			return fmt.Errorf("erro ao abrir arquivo ZIP: %w", err)
+		}
+		defer zipFile.Close()
+
+		// Obter informações do arquivo
+		fileInfo, err := zipFile.Stat()
+		if err != nil {
+			return fmt.Errorf("erro ao obter informações do arquivo: %w", err)
+		}
+
+		// Caminho no MinIO: {user_id}/outputs/{zip_filename}
+		objectName := fmt.Sprintf("%d/outputs/%s", job.UserID, result.ZipPath)
+
+		// Salvar no MinIO
+		_, err = c.minioClient.UploadFile(context.Background(), objectName, zipFile, fileInfo.Size())
+		if err != nil {
+			return fmt.Errorf("erro ao salvar arquivo ZIP no MinIO: %w", err)
+		}
+
+		log.Printf("✅ Arquivo ZIP salvo no MinIO: %s (frames: %d)", objectName, result.FrameCount)
+
+		// Remover arquivo local após salvar no MinIO
+		os.Remove(zipFilePath)
+
+		return nil
+	}
+
+	// Fallback: criar um arquivo de exemplo se não houver ZIP
+	fileName := strings.TrimSuffix(job.FileName, filepath.Ext(job.FileName))
+	processedFileName := fmt.Sprintf("%s_processed.txt", fileName)
 	objectName := fmt.Sprintf("%d/outputs/%s", job.UserID, processedFileName)
 
-	// Aqui você implementaria a lógica real de processamento
-	// Por enquanto, vamos simular criando um arquivo de exemplo
-	processedContent := fmt.Sprintf("Processed video content for %s", job.FileName)
+	processedContent := fmt.Sprintf("Processed video content for %s\nFrames extracted: %d", job.FileName, result.FrameCount)
 
-	// Salvar no MinIO
 	err := c.minioClient.UploadString(context.Background(), objectName, processedContent)
 	if err != nil {
 		return fmt.Errorf("erro ao salvar vídeo processado: %w", err)

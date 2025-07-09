@@ -9,6 +9,7 @@ type VideoProcessingJob struct {
 	VideoURL  string    `json:"video_url"`
 	FileName  string    `json:"file_name"`
 	Status    string    `json:"status"`
+	AuthToken string    `json:"auth_token,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

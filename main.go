@@ -157,7 +157,9 @@ func processVideo(videoPath, timestamp string) ProcessingResult {
 
 	fmt.Printf("📸 Extraídos %d frames\n", len(frames))
 
-	zipFilename := fmt.Sprintf("frames_%s.zip", timestamp)
+	originalFileName := filepath.Base(videoPath)
+	originalNameWithoutExt := strings.TrimSuffix(originalFileName, filepath.Ext(originalFileName))
+	zipFilename := fmt.Sprintf("%s.zip", originalNameWithoutExt)
 	zipPath := filepath.Join("outputs", zipFilename)
 
 	err = createZipFile(frames, zipPath)

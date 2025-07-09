@@ -46,8 +46,8 @@ func main() {
 	// Criar publisher
 	publisher := queue.NewPublisher(rabbitMQClient.GetChannel())
 
-	// Criar processor
-	processor := video_processing.NewProcessor()
+	// Criar processor com MinIO
+	processor := video_processing.NewProcessorWithMinIO(minioClient)
 
 	// Criar consumer (por enquanto sem Redis, vamos adicionar depois)
 	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, minioClient)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -65,7 +66,6 @@ func (m *MinioClient) UploadFile(ctx context.Context, objectName string, file io
 	return url, nil
 }
 
-// UploadString faz upload de uma string como arquivo no MinIO
 func (m *MinioClient) UploadString(ctx context.Context, objectName string, content string) error {
 	reader := strings.NewReader(content)
 
@@ -89,4 +89,25 @@ func (m *MinioClient) GetFileURL(objectName string, expires time.Duration) (stri
 		return "", fmt.Errorf("erro ao gerar URL: %w", err)
 	}
 	return url.String(), nil
+}
+
+func (m *MinioClient) DownloadFile(ctx context.Context, objectName, localPath string) error {
+	obj, err := m.client.GetObject(ctx, m.bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("erro ao obter objeto do MinIO: %w", err)
+	}
+	defer obj.Close()
+
+	localFile, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("erro ao criar arquivo local: %w", err)
+	}
+	defer localFile.Close()
+
+	_, err = io.Copy(localFile, obj)
+	if err != nil {
+		return fmt.Errorf("erro ao copiar dados: %w", err)
+	}
+
+	return nil
 }

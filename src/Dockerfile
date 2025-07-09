@@ -2,6 +2,9 @@ FROM golang:1.23-alpine
 
 WORKDIR /app
 
+# Instalar ffmpeg
+RUN apk add --no-cache ffmpeg
+
 COPY . .
 
 ENV GOTOOLCHAIN=auto

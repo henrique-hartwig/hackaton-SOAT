@@ -105,6 +105,7 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 		VideoURL:  url,
 		FileName:  header.Filename,
 		Status:    models.StatusPending,
+		AuthToken: authHeader,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
