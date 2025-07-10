@@ -120,7 +120,7 @@ services:
       - video-processor-network
 
   frontend:
-    build: ./frontend
+    image: henriquemh/video-processor-frontend:latest
     container_name: video-processor-frontend
     environment:
       API_BASE_URL: http://localhost:8000
