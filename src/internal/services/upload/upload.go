@@ -34,9 +34,7 @@ type VideoCreateResponse struct {
 	ID uint `json:"id"`
 }
 
-// HandleVideoUpload processa o upload de vídeo e envia para processamento
 func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publisher *queue.Publisher) {
-	// 1. Receber arquivo
 	file, header, err := c.Request.FormFile("video")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, UploadResponse{
@@ -47,7 +45,6 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 	}
 	defer file.Close()
 
-	// 2. Validar tipo de arquivo
 	if !isValidVideoFile(header.Filename) {
 		c.JSON(http.StatusBadRequest, UploadResponse{
 			Success: false,
@@ -56,7 +53,6 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 		return
 	}
 
-	// 3. Obter user ID do contexto (setado pelo middleware de autenticação)
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, UploadResponse{
@@ -68,12 +64,10 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 
 	userIDUint := uint(userID.(int))
 
-	// 4. Gerar nome único para o arquivo
 	timestamp := time.Now().Format("20060102_150405")
 	fileName := fmt.Sprintf("%s_%s", timestamp, header.Filename)
 	objectName := fmt.Sprintf("%d/input/%s", userIDUint, fileName)
 
-	// 5. Upload para MinIO
 	url, err := minioClient.UploadFile(c.Request.Context(), objectName, file, header.Size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, UploadResponse{
@@ -83,11 +77,9 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 		return
 	}
 
-	// 6. Criar registro na API de vídeos
 	authHeader := c.GetHeader("Authorization")
 	videoID, err := createVideoInAPI(header.Filename, url, userIDUint, authHeader)
 	if err != nil {
-		// Se falhar, tentar deletar do MinIO
 		minioClient.DeleteFile(c.Request.Context(), objectName)
 
 		c.JSON(http.StatusInternalServerError, UploadResponse{
@@ -97,7 +89,6 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 		return
 	}
 
-	// 7. Enviar job para processamento
 	job := &models.VideoProcessingJob{
 		ID:        generateJobID(),
 		VideoID:   videoID,
@@ -111,12 +102,9 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 	}
 
 	if err := publisher.PublishVideoProcessingJob(job); err != nil {
-		// Log do erro, mas não falha o upload
 		fmt.Printf("⚠️ Erro ao enviar job para processamento: %v\n", err)
-		// Você pode decidir se quer falhar o upload ou apenas logar o erro
 	}
 
-	// 8. Retornar sucesso
 	c.JSON(http.StatusCreated, UploadResponse{
 		Success: true,
 		Message: "Vídeo enviado com sucesso e enviado para processamento!",
@@ -125,7 +113,6 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 	})
 }
 
-// generateJobID gera um ID único para o job
 func generateJobID() string {
 	return fmt.Sprintf("job_%d", time.Now().UnixNano())
 }
@@ -159,7 +146,6 @@ func createVideoInAPI(title, url string, userID uint, authHeader string) (uint, 
 		apiBaseURL = "http://localhost:8000"
 	}
 
-	// Chamar API de vídeos
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/api/v1/videos", apiBaseURL), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return 0, err
@@ -179,7 +165,6 @@ func createVideoInAPI(title, url string, userID uint, authHeader string) (uint, 
 		return 0, fmt.Errorf("API retornou status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Ler resposta
 	var videoResp VideoCreateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&videoResp); err != nil {
 		return 0, err

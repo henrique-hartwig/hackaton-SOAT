@@ -16,7 +16,6 @@ type RedisClient struct {
 	config *config.Config
 }
 
-// NewRedisClient cria nova conexão Redis
 func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 	opts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -25,7 +24,6 @@ func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 
 	client := redis.NewClient(opts)
 
-	// Testar conexão
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -40,7 +38,6 @@ func NewRedisClient(cfg *config.Config) (*RedisClient, error) {
 	}, nil
 }
 
-// VideoCache estrutura para cache de vídeos
 type VideoCache struct {
 	ID          uint      `json:"id"`
 	Title       string    `json:"title"`
@@ -53,7 +50,6 @@ type VideoCache struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// UserSession estrutura para cache de sessão
 type UserSession struct {
 	UserID    uint      `json:"user_id"`
 	Email     string    `json:"email"`
@@ -62,7 +58,6 @@ type UserSession struct {
 	LastLogin time.Time `json:"last_login"`
 }
 
-// ProcessingStatus estrutura para cache de status de processamento
 type ProcessingStatus struct {
 	VideoID       uint      `json:"video_id"`
 	Status        string    `json:"status"`
@@ -72,7 +67,6 @@ type ProcessingStatus struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// Cache keys constants
 const (
 	VideoKeyPrefix      = "video:"
 	UserKeyPrefix       = "user:"
@@ -80,15 +74,13 @@ const (
 	SessionKeyPrefix    = "session:"
 )
 
-// TTL constants
 const (
-	VideoTTL      = 1 * time.Hour    // Metadados de vídeo
-	UserTTL       = 30 * time.Minute // Dados de usuário
-	ProcessingTTL = 10 * time.Minute // Status de processamento
-	SessionTTL    = 24 * time.Hour   // Sessões de usuário
+	VideoTTL      = 1 * time.Hour
+	UserTTL       = 30 * time.Minute
+	ProcessingTTL = 10 * time.Minute
+	SessionTTL    = 24 * time.Hour
 )
 
-// SetVideo armazena dados de vídeo no cache
 func (r *RedisClient) SetVideo(ctx context.Context, video *VideoCache) error {
 	key := fmt.Sprintf("%s%d", VideoKeyPrefix, video.ID)
 
@@ -100,14 +92,13 @@ func (r *RedisClient) SetVideo(ctx context.Context, video *VideoCache) error {
 	return r.client.Set(ctx, key, data, VideoTTL).Err()
 }
 
-// GetVideo recupera dados de vídeo do cache
 func (r *RedisClient) GetVideo(ctx context.Context, videoID uint) (*VideoCache, error) {
 	key := fmt.Sprintf("%s%d", VideoKeyPrefix, videoID)
 
 	data, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, nil // Cache miss
+			return nil, nil
 		}
 		return nil, fmt.Errorf("erro ao buscar vídeo: %w", err)
 	}
@@ -120,7 +111,6 @@ func (r *RedisClient) GetVideo(ctx context.Context, videoID uint) (*VideoCache, 
 	return &video, nil
 }
 
-// SetUserSession armazena sessão de usuário
 func (r *RedisClient) SetUserSession(ctx context.Context, sessionID string, user *UserSession) error {
 	key := fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID)
 
@@ -132,14 +122,13 @@ func (r *RedisClient) SetUserSession(ctx context.Context, sessionID string, user
 	return r.client.Set(ctx, key, data, SessionTTL).Err()
 }
 
-// GetUserSession recupera sessão de usuário
 func (r *RedisClient) GetUserSession(ctx context.Context, sessionID string) (*UserSession, error) {
 	key := fmt.Sprintf("%s%s", SessionKeyPrefix, sessionID)
 
 	data, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, nil // Sessão não encontrada
+			return nil, nil
 		}
 		return nil, fmt.Errorf("erro ao buscar sessão: %w", err)
 	}
@@ -152,7 +141,6 @@ func (r *RedisClient) GetUserSession(ctx context.Context, sessionID string) (*Us
 	return &user, nil
 }
 
-// SetProcessingStatus armazena status de processamento
 func (r *RedisClient) SetProcessingStatus(ctx context.Context, status *ProcessingStatus) error {
 	key := fmt.Sprintf("%s%d", ProcessingKeyPrefix, status.VideoID)
 
@@ -164,14 +152,13 @@ func (r *RedisClient) SetProcessingStatus(ctx context.Context, status *Processin
 	return r.client.Set(ctx, key, data, ProcessingTTL).Err()
 }
 
-// GetProcessingStatus recupera status de processamento
 func (r *RedisClient) GetProcessingStatus(ctx context.Context, videoID uint) (*ProcessingStatus, error) {
 	key := fmt.Sprintf("%s%d", ProcessingKeyPrefix, videoID)
 
 	data, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, nil // Status não encontrado
+			return nil, nil
 		}
 		return nil, fmt.Errorf("erro ao buscar status: %w", err)
 	}
@@ -184,15 +171,12 @@ func (r *RedisClient) GetProcessingStatus(ctx context.Context, videoID uint) (*P
 	return &status, nil
 }
 
-// InvalidateVideo remove vídeo do cache
 func (r *RedisClient) InvalidateVideo(ctx context.Context, videoID uint) error {
 	key := fmt.Sprintf("%s%d", VideoKeyPrefix, videoID)
 	return r.client.Del(ctx, key).Err()
 }
 
-// GetVideosByUser busca vídeos de um usuário (usando padrão)
 func (r *RedisClient) GetVideosByUser(ctx context.Context, userID uint) ([]VideoCache, error) {
-	// Usar SCAN para buscar por padrão (mais eficiente que KEYS)
 	pattern := fmt.Sprintf("%s*", VideoKeyPrefix)
 
 	var videos []VideoCache
@@ -203,12 +187,12 @@ func (r *RedisClient) GetVideosByUser(ctx context.Context, userID uint) ([]Video
 
 		data, err := r.client.Get(ctx, key).Result()
 		if err != nil {
-			continue // Pular erros
+			continue
 		}
 
 		var video VideoCache
 		if err := json.Unmarshal([]byte(data), &video); err != nil {
-			continue // Pular erros de desserialização
+			continue
 		}
 
 		if video.UserID == userID {
@@ -219,12 +203,10 @@ func (r *RedisClient) GetVideosByUser(ctx context.Context, userID uint) ([]Video
 	return videos, iter.Err()
 }
 
-// Close fecha a conexão Redis
 func (r *RedisClient) Close() error {
 	return r.client.Close()
 }
 
-// Health verifica se Redis está funcionando
 func (r *RedisClient) Health(ctx context.Context) error {
 	return r.client.Ping(ctx).Err()
 }

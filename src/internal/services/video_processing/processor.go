@@ -15,7 +15,6 @@ import (
 	"time"
 )
 
-// ProcessingResult representa o resultado do processamento
 type ProcessingResult struct {
 	Status      string    `json:"status"`
 	Message     string    `json:"message"`
@@ -25,28 +24,20 @@ type ProcessingResult struct {
 	Images      []string  `json:"images,omitempty"`
 }
 
-// Processor representa o processador de vídeos
 type Processor struct {
-	// Aqui você pode adicionar dependências como:
-	// - Cliente para APIs externas
-	// - Configurações de processamento
-	// - etc.
 	minioClient *storage.MinioClient
 }
 
-// NewProcessor cria um novo processador
 func NewProcessor() *Processor {
 	return &Processor{}
 }
 
-// NewProcessorWithMinIO cria um novo processador com cliente MinIO
 func NewProcessorWithMinIO(minioClient *storage.MinioClient) *Processor {
 	return &Processor{
 		minioClient: minioClient,
 	}
 }
 
-// ProcessVideo processa um vídeo extraindo frames e criando ZIP
 func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResult {
 	log.Printf("🎬 Iniciando processamento do vídeo: %s", job.FileName)
 
@@ -54,10 +45,8 @@ func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResu
 	os.MkdirAll(userTempDir, 0755)
 	os.MkdirAll("outputs", 0755)
 
-	// Gerar timestamp único para o processamento
 	timestamp := time.Now().Format("20060102_150405")
 
-	// Baixar vídeo do MinIO para a pasta temp do usuário
 	videoPath, err := p.downloadVideoFromMinIO(job.VideoURL, timestamp, userTempDir)
 	if err != nil {
 		return &ProcessingResult{
@@ -66,9 +55,8 @@ func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResu
 			ProcessedAt: time.Now(),
 		}
 	}
-	defer os.Remove(videoPath) // Limpar arquivo temporário
+	defer os.Remove(videoPath)
 
-	// Processar o vídeo usando a função real, frames também vão para a temp do usuário
 	result := processVideo(videoPath, timestamp, userTempDir)
 
 	processingResult := &ProcessingResult{
@@ -91,7 +79,6 @@ func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResu
 func (p *Processor) ProcessVideoWithError(job *models.VideoProcessingJob) *ProcessingResult {
 	log.Printf("🎬 Iniciando processamento do vídeo (com erro): %s", job.FileName)
 
-	// Simular processamento
 	time.Sleep(1 * time.Second)
 
 	result := &ProcessingResult{
@@ -215,7 +202,6 @@ func addFileToZip(zipWriter *zip.Writer, filename string) error {
 	return err
 }
 
-// downloadVideoFromMinIO baixa um vídeo do MinIO para um arquivo local
 func (p *Processor) downloadVideoFromMinIO(videoURL, timestamp, userTempDir string) (string, error) {
 	if p.minioClient == nil {
 		return "", fmt.Errorf("cliente MinIO não configurado")

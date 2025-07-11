@@ -10,7 +10,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// mudar para vir de variavel de ambiente
 var secretKey = []byte("minha-chave-supersecreta")
 
 func AuthMiddleware() gin.HandlerFunc {

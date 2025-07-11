@@ -199,34 +199,27 @@ func (c *Consumer) processAndSaveVideo(job *models.VideoProcessingJob) error {
 	return fmt.Errorf("processamento falhou: %s", result.Message)
 }
 
-// saveProcessedVideo salva o vídeo processado no MinIO
 func (c *Consumer) saveProcessedVideo(job *models.VideoProcessingJob, result *video_processing.ProcessingResult) error {
-	// Se temos um arquivo ZIP gerado, salvá-lo no MinIO
 	if result.ZipPath != "" {
 		zipFilePath := filepath.Join("outputs", result.ZipPath)
 
-		// Verificar se o arquivo existe
 		if _, err := os.Stat(zipFilePath); os.IsNotExist(err) {
 			return fmt.Errorf("arquivo ZIP não encontrado: %s", zipFilePath)
 		}
 
-		// Abrir o arquivo ZIP
 		zipFile, err := os.Open(zipFilePath)
 		if err != nil {
 			return fmt.Errorf("erro ao abrir arquivo ZIP: %w", err)
 		}
 		defer zipFile.Close()
 
-		// Obter informações do arquivo
 		fileInfo, err := zipFile.Stat()
 		if err != nil {
 			return fmt.Errorf("erro ao obter informações do arquivo: %w", err)
 		}
 
-		// Caminho no MinIO: {user_id}/outputs/{zip_filename}
 		objectName := fmt.Sprintf("%d/outputs/%s", job.UserID, result.ZipPath)
 
-		// Salvar no MinIO
 		_, err = c.minioClient.UploadFile(context.Background(), objectName, zipFile, fileInfo.Size())
 		if err != nil {
 			return fmt.Errorf("erro ao salvar arquivo ZIP no MinIO: %w", err)
@@ -234,13 +227,11 @@ func (c *Consumer) saveProcessedVideo(job *models.VideoProcessingJob, result *vi
 
 		log.Printf("✅ Arquivo ZIP salvo no MinIO: %s (frames: %d)", objectName, result.FrameCount)
 
-		// Remover arquivo local após salvar no MinIO
 		os.Remove(zipFilePath)
 
 		return nil
 	}
 
-	// Fallback: criar um arquivo de exemplo se não houver ZIP
 	fileName := strings.TrimSuffix(job.FileName, filepath.Ext(job.FileName))
 	processedFileName := fmt.Sprintf("%s_processed.txt", fileName)
 	objectName := fmt.Sprintf("%d/outputs/%s", job.UserID, processedFileName)

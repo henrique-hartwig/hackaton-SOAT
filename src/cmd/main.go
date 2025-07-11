@@ -30,7 +30,6 @@ func main() {
 		log.Fatal("Erro ao conectar MinIO:", err)
 	}
 
-	// Inicializar Redis
 	redisClient, err := cache.NewRedisClient(cfg)
 	if err != nil {
 		log.Fatal("Erro ao conectar Redis:", err)
@@ -43,27 +42,21 @@ func main() {
 	}
 	defer rabbitMQClient.Close()
 
-	// Criar publisher
 	publisher := queue.NewPublisher(rabbitMQClient.GetChannel())
 
-	// Criar processor com MinIO
 	processor := video_processing.NewProcessorWithMinIO(minioClient)
 
-	// Criar consumer (por enquanto sem Redis, vamos adicionar depois)
 	consumer := queue.NewConsumer(rabbitMQClient.GetChannel(), processor, minioClient)
 
-	// Contexto para graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Iniciar consumer em background
 	go func() {
 		if err := consumer.StartProcessing(ctx); err != nil {
 			log.Printf("Erro no consumer de processamento: %v", err)
 		}
 	}()
 
-	// Configurar graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -88,12 +81,10 @@ func main() {
 		c.Next()
 	})
 
-	// Endpoint de upload (protegido por autenticação)
 	router.POST("/upload/video", middleware.AuthMiddleware(), func(c *gin.Context) {
 		upload.HandleVideoUpload(c, minioClient, publisher)
 	})
 
-	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
