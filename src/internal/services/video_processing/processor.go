@@ -42,8 +42,21 @@ func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResu
 	log.Printf("🎬 Iniciando processamento do vídeo: %s", job.FileName)
 
 	userTempDir := filepath.Join("videos", fmt.Sprintf("%d", job.UserID), "temp")
-	os.MkdirAll(userTempDir, 0755)
-	os.MkdirAll("outputs", 0755)
+	if err := os.MkdirAll(userTempDir, 0755); err != nil {
+		return &ProcessingResult{
+			Status:      models.StatusFailed,
+			Message:     "Erro ao criar diretório temporário: " + err.Error(),
+			ProcessedAt: time.Now(),
+		}
+	}
+
+	if err := os.MkdirAll("outputs", 0755); err != nil {
+		return &ProcessingResult{
+			Status:      models.StatusFailed,
+			Message:     "Erro ao criar diretório de output: " + err.Error(),
+			ProcessedAt: time.Now(),
+		}
+	}
 
 	timestamp := time.Now().Format("20060102_150405")
 
@@ -57,7 +70,7 @@ func (p *Processor) ProcessVideo(job *models.VideoProcessingJob) *ProcessingResu
 	}
 	defer os.Remove(videoPath)
 
-	result := processVideo(videoPath, timestamp, userTempDir)
+	result := processVideo(videoPath, userTempDir)
 
 	processingResult := &ProcessingResult{
 		Status:      models.StatusCompleted,
@@ -91,10 +104,15 @@ func (p *Processor) ProcessVideoWithError(job *models.VideoProcessingJob) *Proce
 	return result
 }
 
-func processVideo(videoPath, timestamp, tempDir string) ProcessingResult {
+func processVideo(videoPath, tempDir string) ProcessingResult {
 	fmt.Printf("Iniciando processamento: %s\n", videoPath)
 
-	os.MkdirAll(tempDir, 0755)
+	if err := os.MkdirAll(tempDir, 0755); err != nil {
+		return ProcessingResult{
+			Status:  "failed",
+			Message: "Erro ao criar diretório temporário: " + err.Error(),
+		}
+	}
 	defer os.RemoveAll(tempDir)
 
 	framePattern := filepath.Join(tempDir, "frame_%04d.png")

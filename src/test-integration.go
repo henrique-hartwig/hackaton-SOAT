@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func testIntegration() {
+func main() {
 	fmt.Println("🧪 Iniciando testes de integração...")
 
 	// Carregar configuração

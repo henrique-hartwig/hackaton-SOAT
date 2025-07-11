@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,8 +81,9 @@ func HandleVideoUpload(c *gin.Context, minioClient *storage.MinioClient, publish
 	authHeader := c.GetHeader("Authorization")
 	videoID, err := createVideoInAPI(header.Filename, url, userIDUint, authHeader)
 	if err != nil {
-		minioClient.DeleteFile(c.Request.Context(), objectName)
-
+		if deleteErr := minioClient.DeleteFile(c.Request.Context(), objectName); deleteErr != nil {
+			log.Printf("Erro ao deletar arquivo do MinIO: %v", deleteErr)
+		}
 		c.JSON(http.StatusInternalServerError, UploadResponse{
 			Success: false,
 			Message: "Erro ao salvar registro na API: " + err.Error(),

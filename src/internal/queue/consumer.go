@@ -68,8 +68,10 @@ func (c *Consumer) StartProcessing(ctx context.Context) error {
 func (c *Consumer) handleMessage(msg amqp.Delivery) {
 	var job models.VideoProcessingJob
 	if err := json.Unmarshal(msg.Body, &job); err != nil {
-		log.Printf("❌ Erro ao deserializar job: %v", err)
-		msg.Nack(false, false)
+		log.Printf("Erro ao deserializar job: %v", err)
+		if nackErr := msg.Nack(false, false); nackErr != nil {
+			log.Printf("Erro ao fazer Nack: %v", nackErr)
+		}
 		return
 	}
 
@@ -82,27 +84,31 @@ func (c *Consumer) handleMessage(msg amqp.Delivery) {
 		err := c.processAndSaveVideo(&job)
 		if err == nil {
 			if updateErr := c.updateVideoStatus(job.VideoID, models.StatusCompleted, job.AuthToken); updateErr != nil {
-				log.Printf("⚠️ Erro ao atualizar status para completed: %v", updateErr)
+				log.Printf("Erro ao atualizar status para completed: %v", updateErr)
 			}
-			msg.Ack(false)
+			if ackErr := msg.Ack(false); ackErr != nil {
+				log.Printf("Erro ao fazer Ack: %v", ackErr)
+			}
 			return
 		}
 
-		log.Printf("❌ Tentativa %d falhou para VideoID=%d: %v", attempt, job.VideoID, err)
+		log.Printf("Tentativa %d falhou para VideoID=%d: %v", attempt, job.VideoID, err)
 
 		if attempt < maxRetries {
 			waitTime := time.Duration(attempt*attempt) * time.Second
-			log.Printf("⏳ Aguardando %v antes da próxima tentativa...", waitTime)
+			log.Printf("Aguardando %v antes da próxima tentativa...", waitTime)
 			time.Sleep(waitTime)
 		}
 	}
 
-	log.Printf("💥 Todas as %d tentativas falharam para VideoID=%d", maxRetries, job.VideoID)
+	log.Printf("Todas as %d tentativas falharam para VideoID=%d", maxRetries, job.VideoID)
 	if updateErr := c.updateVideoStatus(job.VideoID, models.StatusFailed, job.AuthToken); updateErr != nil {
-		log.Printf("⚠️ Erro ao atualizar status para failed: %v", updateErr)
+		log.Printf("Erro ao atualizar status para failed: %v", updateErr)
 	}
 
-	msg.Ack(false)
+	if ackErr := msg.Ack(false); ackErr != nil {
+		log.Printf("Erro ao fazer Ack: %v", ackErr)
+	}
 }
 
 func (c *Consumer) updateVideoStatus(videoID uint, status string, authToken string) error {
@@ -185,7 +191,7 @@ func (c *Consumer) updateVideoStatus(videoID uint, status string, authToken stri
 
 func (c *Consumer) processAndSaveVideo(job *models.VideoProcessingJob) error {
 	if err := c.updateVideoStatus(job.VideoID, models.StatusProcessing, job.AuthToken); err != nil {
-		log.Printf("⚠️ Erro ao atualizar status para processing: %v", err)
+		log.Printf("Erro ao atualizar status para processing: %v", err)
 	}
 
 	result := c.processor.ProcessVideo(job)
